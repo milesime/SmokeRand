@@ -16,6 +16,9 @@
 #if defined(_WIN32) || defined(_WIN64) || defined(WIN32) || defined(WIN64) || defined(__MINGW32__) || defined(__MINGW64__)
     #include <windows.h>
     #define WINDOWS_PLATFORM
+#elif defined(__APPLE__)
+    #include <sys/types.h>
+    #include <sys/sysctl.h>
 #endif
 
 
@@ -127,6 +130,17 @@ double get_cpu_freq(void)
         RegCloseKey(hKey);
         return (status == ERROR_SUCCESS) ? (double) cpuSpeedMHz : 0.0;
     }
+#elif defined(__APPLE__)
+    uint64_t freq_hz = 0;
+    size_t size = sizeof(freq_hz);
+    if (sysctlbyname("hw.cpufrequency", &freq_hz, &size, NULL, 0) == 0 && freq_hz > 0) {
+        return (double) freq_hz / 1e6;
+    }
+    size = sizeof(freq_hz);
+    if (sysctlbyname("hw.cpufrequency_max", &freq_hz, &size, NULL, 0) == 0 && freq_hz > 0) {
+        return (double) freq_hz / 1e6;
+    }
+    return (double) estimate_cpu_freq() / 1e6;
 #elif !defined(NO_POSIX)
     FILE *fp = fopen("/proc/cpuinfo", "r");
     if (fp == NULL) {

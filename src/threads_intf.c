@@ -196,6 +196,14 @@ ThreadObj ThreadObj_current(void)
 #elif !defined(NO_POSIX)
     #include <unistd.h>
     #include <dlfcn.h>
+    #if defined(__APPLE__)
+        #include <sys/types.h>
+        #include <sys/sysctl.h>
+        #include <mach/mach.h>
+        #include <mach/vm_statistics.h>
+        #include <mach/mach_init.h>
+        #include <mach/mach_host.h>
+    #endif
 #endif
 
 
@@ -299,6 +307,13 @@ unsigned int get_cpu_numcores(void)
     } else {
         return 1;
     }
+#elif defined(__APPLE__)
+    int ncpu = 0;
+    size_t len = sizeof(ncpu);
+    if (sysctlbyname("hw.logicalcpu", &ncpu, &len, NULL, 0) == 0 && ncpu >= 1) {
+        return (unsigned int) ncpu;
+    }
+    return 1;
 #elif defined(__DJGPP__)
     return 1;
 #elif !defined(NO_POSIX)
@@ -434,6 +449,30 @@ int get_ram_info(RamInfo *info)
         (long long) (meminfo.num_physical_pages_free * page_size);
     trunc_ram_info(info);
     return 1; // Success
+#elif defined(__APPLE__)
+    uint64_t memsize = 0;
+    size_t len = sizeof(memsize);
+    if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0) {
+        info->phys_total_nbytes = (long long) memsize;
+    } else {
+        info->phys_total_nbytes = RAM_SIZE_UNKNOWN;
+    }
+    mach_port_t host_port = mach_host_self();
+    vm_size_t page_size = 0;
+    vm_statistics64_data_t vm_stats;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    if (host_page_size(host_port, &page_size) == KERN_SUCCESS &&
+        host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t) &vm_stats, &count) == KERN_SUCCESS) {
+        info->phys_avail_nbytes = ((long long) vm_stats.free_count + (long long) vm_stats.inactive_count) * (long long) page_size;
+        if (info->phys_avail_nbytes > info->phys_total_nbytes && info->phys_total_nbytes != RAM_SIZE_UNKNOWN) {
+            info->phys_avail_nbytes = info->phys_total_nbytes;
+        }
+    } else {
+        info->phys_avail_nbytes = RAM_SIZE_UNKNOWN;
+    }
+    mach_port_deallocate(mach_task_self(), host_port);
+    trunc_ram_info(info);
+    return (info->phys_total_nbytes != RAM_SIZE_UNKNOWN) ? 1 : 0;
 #elif !defined(NO_POSIX)
     const long long page_size = sysconf(_SC_PAGESIZE);
     info->phys_total_nbytes = sysconf(_SC_PHYS_PAGES) * page_size;
