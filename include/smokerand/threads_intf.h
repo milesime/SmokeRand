@@ -25,11 +25,11 @@
 ////////////////////////////////////////////////////
 
 #ifndef NOTHREADS
-    #if defined(_MSC_VER) && !defined (__clang__)
+    #if defined(_MSC_VER)
     #define USE_WINTHREADS
     #endif
 
-    #if (defined(__GNUC__) || defined(__MINGW32__) || defined(__MINGW64__)) && !defined(__clang__) && !defined(USE_WINTHREADS)
+    #if (defined(__GNUC__) || defined(__MINGW32__) || defined(__MINGW64__)) && !defined(USE_WINTHREADS)
     #define USE_PTHREADS
     #endif
 #endif
